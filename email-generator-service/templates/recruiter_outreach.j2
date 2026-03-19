@@ -1,0 +1,16 @@
+Subject: {{ role }} application — {{ your_name }} ({{ graduation_year }} grad)
+
+Hi {{ contact_name | default("there") }},
+
+I'm {{ your_name }}, a {{ graduation_year }} engineering graduate with hands-on experience in {{ your_stack | join(", ") }}. I'm very interested in the **{{ role }}** role at {{ company }}.
+
+{{ product_observation }}
+
+I've attached my resume and would appreciate knowing what the next steps look like in your hiring process.
+
+GitHub: {{ github_url }}
+
+Looking forward to hearing from you.
+
+Thanks,
+{{ your_name }}

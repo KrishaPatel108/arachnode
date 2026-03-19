@@ -1,0 +1,51 @@
+# fallbacks.yaml
+# Static product observations grouped by company type.
+# Used when Ollama is unavailable or times out.
+# The generator selects the best-matching category from the job's stack/product tags.
+# Add more entries freely — all are intentionally generic but technically credible.
+
+fintech:
+  keywords: [payment, payments, banking, finance, financial, lending, credit, insurance, wealth, neobank, razorpay, stripe, paytm, zerodha, cred, slice]
+  observations:
+    - "The real-time payment reconciliation infrastructure you've built to handle settlement latency at scale is a genuinely hard engineering problem."
+    - "Your approach to reducing API latency at the banking-network boundary while maintaining ACID guarantees stands out in the fintech space."
+    - "Building a checkout flow that stays under 300ms across mobile networks in India is a deceptively difficult systems challenge, and you've done it well."
+    - "Your fraud-detection pipeline that operates in sub-50ms without blocking the payment flow reflects strong systems design thinking."
+
+devtools:
+  keywords: [developer, devtools, sdk, cli, api, ide, debugging, observability, monitoring, logging, tracing, grafana, datadog, sentry, postman, linear]
+  observations:
+    - "The developer experience you've built around the SDK — especially the typed error surfaces — removes an entire class of runtime surprises for backend teams."
+    - "Building an observability platform that correlates distributed traces with log streams without requiring agent instrumentation is a genuinely hard problem to solve cleanly."
+    - "The way you've structured the CLI to be both scriptable and human-readable at the same time is rare and makes it much easier to integrate into CI pipelines."
+    - "Your approach to query-time aggregation instead of pre-computed rollups gives product teams flexibility that most monitoring tools don't offer."
+
+saas:
+  keywords: [saas, b2b, crm, erp, workflow, automation, productivity, collaboration, notion, freshworks, zoho, salesforce, hubspot]
+  observations:
+    - "The multi-tenant data isolation model you've implemented without sacrificing query performance at scale shows careful systems thinking."
+    - "Building real-time collaborative editing with conflict resolution across a distributed backend is one of the genuinely hard problems in SaaS, and you've tackled it head-on."
+    - "Your event-driven workflow engine that handles conditional branching without hardcoded state machines is the kind of architecture that scales well into enterprise accounts."
+    - "The way you've structured permissions with attribute-based access control instead of static roles gives enterprise customers the flexibility they actually need."
+
+ecommerce:
+  keywords: [ecommerce, e-commerce, marketplace, retail, logistics, supply chain, inventory, catalog, shopify, flipkart, amazon, meesho, nykaa, myntra]
+  observations:
+    - "Serving accurate inventory counts across distributed warehouse nodes under flash-sale traffic is one of the harder consistency challenges in e-commerce, and your architecture handles it well."
+    - "Your catalog indexing pipeline that delivers sub-second faceted search across millions of SKUs is the kind of infrastructure that directly converts to revenue."
+    - "The dynamic pricing engine you've built that factors in real-time competitor signals without introducing latency into the checkout path reflects strong engineering trade-offs."
+    - "Building a logistics ETA model that accounts for last-mile variability while staying explainable to ops teams is a problem most platforms still haven't solved cleanly."
+
+infra:
+  keywords: [infrastructure, cloud, kubernetes, k8s, docker, devops, platform, networking, storage, database, postgres, kafka, redis, distributed, open source]
+  observations:
+    - "Building a distributed storage system that preserves strong consistency guarantees without sacrificing horizontal scalability is a fundamentally hard problem, and you've tackled it thoughtfully."
+    - "The scheduler you've built that bin-packs heterogeneous workloads while respecting resource quotas across namespaces is the kind of invisible infrastructure that entire platforms depend on."
+    - "Making zero-downtime schema migrations predictable across large Postgres clusters is a problem that most teams work around rather than solve — it's impressive that you've built this into the platform."
+    - "Your approach to control-plane/data-plane separation keeps operator complexity manageable as the system grows — a design discipline that's rare in open-source infra projects."
+
+default:
+  observations:
+    - "The architecture decisions that go into keeping your platform reliable under real production load reflect the kind of engineering culture I'd be excited to contribute to."
+    - "The thoughtful trade-offs visible in your technical blog posts show an engineering team that values correctness and maintainability alongside shipping velocity."
+    - "What you've built is genuinely used at scale, and the engineering challenges that come with that are exactly the kind I'm looking to work on next."
