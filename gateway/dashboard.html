@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Job Discovery System</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<style>
+/* ─────────────────────────────────────────────
+   Design tokens
+───────────────────────────────────────────── */
+:root {
+  --accent:      #4f46e5;
+  --accent-dim:  #ede9fe;
+  --bg:          #f9fafb;
+  --surface:     #ffffff;
+  --border:      #e5e7eb;
+  --text:        #111827;
+  --text-muted:  #6b7280;
+  --green:       #059669;
+  --green-bg:    #d1fae5;
+  --amber:       #d97706;
+  --amber-bg:    #fef3c7;
+  --red:         #dc2626;
+  --red-bg:      #fee2e2;
+  --blue:        #2563eb;
+  --blue-bg:     #dbeafe;
+  --radius:      8px;
+  --shadow:      0 1px 4px rgba(0,0,0,.08);
+  --transition:  .15s ease;
+}
+
+/* ─────────────────────────────────────────────
+   Reset & base
+───────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+       background: var(--bg); color: var(--text); line-height: 1.5; }
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: inherit; }
+input, select { font-family: inherit; }
+
+/* ─────────────────────────────────────────────
+   Layout
+───────────────────────────────────────────── */
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  height: 56px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: var(--shadow);
+}
+.logo {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--accent);
+  white-space: nowrap;
+  letter-spacing: -.02em;
+}
+.logo span { color: var(--text); }
+
+nav { display: flex; gap: 4px; flex: 1; }
+nav button {
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius);
+  font-size: .875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: var(--transition);
+}
+nav button:hover  { background: var(--bg); color: var(--text); }
+nav button.active { background: var(--accent-dim); color: var(--accent); }
+
+#health-dot {
+  width: 8px; height: 8px;
+  background: var(--green);
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background var(--transition);
+}
+#health-dot.warn { background: var(--amber); }
+#health-dot.err  { background: var(--red); }
+
+main { max-width: 1200px; margin: 0 auto; padding: 28px 24px; }
+
+.view { display: none; }
+.view.active { display: block; }
+
+/* ─────────────────────────────────────────────
+   Filter bar
+───────────────────────────────────────────── */
+.filter-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.filter-bar input,
+.filter-bar select {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: .875rem;
+  color: var(--text);
+  outline: none;
+  transition: border-color var(--transition);
+}
+.filter-bar input:focus,
+.filter-bar select:focus { border-color: var(--accent); }
+.filter-bar input { flex: 1; min-width: 180px; }
+
+/* ─────────────────────────────────────────────
+   Job cards
+───────────────────────────────────────────── */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.job-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  transition: transform var(--transition), box-shadow var(--transition);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.job-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+
+.job-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.job-card h3 { font-size: .9375rem; font-weight: 600; line-height: 1.3; }
+.job-card .company { font-size: .8125rem; color: var(--text-muted); margin-top: 2px; }
+
+.source-badge {
+  font-size: .6875rem; font-weight: 600; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 99px;
+  background: var(--accent-dim); color: var(--accent);
+  white-space: nowrap; flex-shrink: 0;
+}
+
+.tag-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.tag {
+  font-size: .75rem; padding: 2px 8px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 99px; color: var(--text-muted);
+}
+
+.card-meta { font-size: .75rem; color: var(--text-muted); }
+.card-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 4px; }
+
+/* ─────────────────────────────────────────────
+   Buttons
+───────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px 12px; border: none; border-radius: var(--radius);
+  font-size: .8125rem; font-weight: 500;
+  transition: opacity var(--transition);
+}
+.btn:hover { opacity: .85; }
+.btn:active { opacity: .7; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.btn-primary   { background: var(--accent);  color: #fff; }
+.btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+.btn-green     { background: var(--green-bg); color: var(--green); }
+.btn-amber     { background: var(--amber-bg); color: var(--amber); }
+
+/* ─────────────────────────────────────────────
+   Table
+───────────────────────────────────────────── */
+.table-wrap { background: var(--surface); border: 1px solid var(--border);
+              border-radius: var(--radius); overflow: hidden; }
+table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+thead { background: var(--bg); }
+th { padding: 10px 14px; text-align: left; font-weight: 600;
+     font-size: .8125rem; color: var(--text-muted); white-space: nowrap; }
+td { padding: 10px 14px; border-top: 1px solid var(--border); vertical-align: middle; }
+tbody tr:hover { background: var(--bg); }
+
+/* ─────────────────────────────────────────────
+   Badges
+───────────────────────────────────────────── */
+.badge {
+  display: inline-block;
+  font-size: .6875rem; font-weight: 600; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 99px; letter-spacing: .03em;
+}
+.badge-verified   { background: var(--green-bg);  color: var(--green); }
+.badge-unverified { background: var(--amber-bg);  color: var(--amber); }
+.badge-invalid    { background: var(--red-bg);    color: var(--red); }
+.badge-draft      { background: var(--bg);        color: var(--text-muted); border: 1px solid var(--border); }
+.badge-sent       { background: var(--blue-bg);   color: var(--blue); }
+.badge-replied    { background: var(--green-bg);  color: var(--green); }
+.badge-new        { background: var(--accent-dim);color: var(--accent); }
+.badge-applied    { background: var(--green-bg);  color: var(--green); }
+.badge-ignored    { background: var(--bg);        color: var(--text-muted); border: 1px solid var(--border); }
+
+/* ─────────────────────────────────────────────
+   Stats view
+───────────────────────────────────────────── */
+.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px 24px; box-shadow: var(--shadow);
+}
+.stat-card .stat-label { font-size: .8125rem; color: var(--text-muted); font-weight: 500; }
+.stat-card .stat-value { font-size: 2rem; font-weight: 700; margin-top: 4px; color: var(--accent); }
+
+.stats-lower { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+.chart-card, .top-companies {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow);
+}
+.chart-card h4, .top-companies h4 {
+  font-size: .875rem; font-weight: 600; margin-bottom: 16px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.top-company-row { display: flex; justify-content: space-between; align-items: center;
+                    padding: 8px 0; border-bottom: 1px solid var(--border); font-size: .875rem; }
+.top-company-row:last-child { border-bottom: none; }
+.top-company-count { font-weight: 600; color: var(--accent); }
+
+/* ─────────────────────────────────────────────
+   Modal
+───────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  display: none; align-items: center; justify-content: center;
+  z-index: 200; padding: 20px;
+}
+.modal-backdrop.open { display: flex; }
+
+.modal {
+  background: var(--surface); border-radius: 12px;
+  max-width: 640px; width: 100%;
+  box-shadow: 0 20px 60px rgba(0,0,0,.2);
+  display: flex; flex-direction: column; max-height: 90vh;
+  animation: slideIn .15s ease;
+}
+@keyframes slideIn { from { transform: translateY(-12px); opacity: 0; } }
+
+.modal-header {
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.modal-header h3 { font-size: 1rem; font-weight: 600; }
+.modal-close {
+  background: none; border: none; font-size: 1.25rem;
+  color: var(--text-muted); cursor: pointer; line-height: 1;
+  padding: 4px 6px; border-radius: 4px;
+}
+.modal-close:hover { background: var(--bg); }
+
+.modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+.modal-field { margin-bottom: 16px; }
+.modal-field label { display: block; font-size: .8125rem; font-weight: 600;
+                      color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .04em; }
+.modal-field .field-value {
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 12px; font-size: .875rem; white-space: pre-wrap; line-height: 1.6;
+}
+
+.modal-footer {
+  padding: 14px 20px; border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-end; gap: 8px;
+}
+
+/* ─────────────────────────────────────────────
+   Section header
+───────────────────────────────────────────── */
+.section-header {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;
+}
+.section-header h2 { font-size: 1.125rem; font-weight: 700; }
+
+/* ─────────────────────────────────────────────
+   Expandable email row
+───────────────────────────────────────────── */
+.email-body-row td { background: var(--bg); padding: 14px 20px; }
+.email-body-pre { white-space: pre-wrap; font-size: .8125rem; line-height: 1.7; color: var(--text); }
+
+/* ─────────────────────────────────────────────
+   Empty state
+───────────────────────────────────────────── */
+.empty-state {
+  text-align: center; padding: 60px 20px; color: var(--text-muted);
+}
+.empty-state .empty-icon { font-size: 2.5rem; margin-bottom: 12px; }
+.empty-state p { font-size: .9375rem; }
+
+/* ─────────────────────────────────────────────
+   Toast
+───────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 300;
+  background: var(--text); color: #fff;
+  padding: 10px 18px; border-radius: var(--radius);
+  font-size: .875rem; opacity: 0;
+  transition: opacity .2s ease;
+  pointer-events: none; max-width: 320px;
+}
+#toast.show { opacity: 1; }
+
+/* ─────────────────────────────────────────────
+   Loader
+───────────────────────────────────────────── */
+.loader {
+  display: inline-block; width: 18px; height: 18px;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin .6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─────────────────────────────────────────────
+   Responsive
+───────────────────────────────────────────── */
+@media (max-width: 768px) {
+  header { gap: 12px; padding: 0 14px; }
+  nav button { padding: 5px 9px; font-size: .8125rem; }
+  main { padding: 16px 14px; }
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .stats-lower { grid-template-columns: 1fr; }
+  .card-grid { grid-template-columns: 1fr; }
+  .filter-bar input { min-width: 140px; }
+  table { font-size: .8125rem; }
+  th, td { padding: 8px 10px; }
+}
+@media (max-width: 480px) {
+  .stats-grid { grid-template-columns: 1fr; }
+  .logo { font-size: .875rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ─────────────────────────────────────────────── -->
+<header>
+  <div class="logo">Job<span>Scout</span></div>
+  <nav>
+    <button class="active" data-view="jobs"     id="tab-jobs">Jobs</button>
+    <button              data-view="contacts"  id="tab-contacts">Contacts</button>
+    <button              data-view="emails"    id="tab-emails">Emails</button>
+    <button              data-view="stats"     id="tab-stats">Stats</button>
+  </nav>
+  <div id="health-dot" title="All services healthy"></div>
+</header>
+
+<!-- ── MAIN ──────────────────────────────────────────────── -->
+<main>
+
+  <!-- ═══════════════ JOBS VIEW ══════════════ -->
+  <div id="view-jobs" class="view active">
+    <div class="section-header">
+      <h2>Job Listings</h2>
+      <button class="btn btn-primary" id="btn-run-scraper">▶ Run Scraper</button>
+    </div>
+
+    <div class="filter-bar">
+      <input  id="filter-search"  type="text"   placeholder="Search role or company…" />
+      <select id="filter-status">
+        <option value="">All statuses</option>
+        <option value="new">New</option>
+        <option value="applied">Applied</option>
+        <option value="ignored">Ignored</option>
+      </select>
+      <select id="filter-stack">
+        <option value="">All stacks</option>
+      </select>
+      <button class="btn btn-secondary" id="btn-filter">Filter</button>
+    </div>
+
+    <div id="jobs-grid" class="card-grid">
+      <div class="empty-state"><div class="empty-icon">🔍</div><p>Loading jobs…</p></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ CONTACTS VIEW ══════════════ -->
+  <div id="view-contacts" class="view">
+    <div class="section-header">
+      <h2>Discovered Contacts</h2>
+      <input type="text" id="contact-company-filter" placeholder="Filter by company…"
+             style="padding:7px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:.875rem;outline:none;"/>
+    </div>
+    <div class="table-wrap">
+      <table id="contacts-table">
+        <thead>
+          <tr>
+            <th>Name</th><th>Email</th><th>Role</th><th>Company</th>
+            <th>Verified</th><th>Source</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="contacts-body">
+          <tr><td colspan="7"><div class="empty-state"><div class="empty-icon">👤</div><p>Loading contacts…</p></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════ EMAILS VIEW ══════════════ -->
+  <div id="view-emails" class="view">
+    <div class="section-header">
+      <h2>Generated Emails</h2>
+    </div>
+    <div class="table-wrap">
+      <table id="emails-table">
+        <thead>
+          <tr>
+            <th>Company / Role</th><th>Contact</th><th>Template</th>
+            <th>Status</th><th>Generated</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="emails-body">
+          <tr><td colspan="6"><div class="empty-state"><div class="empty-icon">✉️</div><p>Loading emails…</p></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════ STATS VIEW ══════════════ -->
+  <div id="view-stats" class="view">
+    <h2 style="margin-bottom:20px;">Overview</h2>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Jobs</div>
+        <div class="stat-value" id="stat-total">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Applied</div>
+        <div class="stat-value" id="stat-applied" style="color:var(--green)">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Pending</div>
+        <div class="stat-value" id="stat-pending" style="color:var(--amber)">—</div>
+      </div>
+    </div>
+    <div class="stats-lower">
+      <div class="chart-card">
+        <h4>Jobs by Source</h4>
+        <canvas id="source-chart" height="220"></canvas>
+      </div>
+      <div class="top-companies">
+        <h4>Top Companies</h4>
+        <div id="top-companies-list"></div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── EMAIL DRAFT MODAL ─────────────────────── -->
+<div class="modal-backdrop" id="email-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title">Draft Email</h3>
+      <button class="modal-close" id="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-field">
+        <label>Subject</label>
+        <div class="field-value" id="modal-subject"></div>
+      </div>
+      <div class="modal-field">
+        <label>Body</label>
+        <div class="field-value" id="modal-body-text"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modal-close-btn">Close</button>
+      <button class="btn btn-primary"   id="modal-send-btn">Send Email</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST ─────────────────────────────────── -->
+<div id="toast"></div>
+
+<!-- ── SCRIPTS ───────────────────────────────── -->
+<script>
+/* ─────────────────────────────── helpers ──── */
+const $ = (id) => document.getElementById(id);
+const API = (path) => `/api${path}`;
+
+let _sourceChart = null;
+
+function toast(msg, duration = 3000) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), duration);
+}
+
+function badge(text, cls) {
+  return `<span class="badge badge-${cls}">${text}</span>`;
+}
+
+function verifiedBadge(v) {
+  if (v === 'verified')   return badge('Verified', 'verified');
+  if (v === 'invalid')    return badge('Invalid', 'invalid');
+  return badge('Unverified', 'unverified');
+}
+
+function statusBadge(s) {
+  const map = { draft:'draft', sent:'sent', replied:'replied', new:'new', applied:'applied', ignored:'ignored' };
+  return badge(s, map[s] || 'draft');
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+}
+
+async function apiFetch(path, opts = {}) {
+  try {
+    const r = await fetch(API(path), opts);
+    if (!r.ok) throw new Error(`${r.status}`);
+    return await r.json();
+  } catch(e) {
+    console.error('API error', path, e);
+    return null;
+  }
+}
+
+/* ─────────────────────────────── health ──── */
+async function checkHealth() {
+  const dot = $('health-dot');
+  const data = await apiFetch('/health');
+  if (!data) { dot.className = 'err'; dot.title = 'Gateway unreachable'; return; }
+  const allOk = data.services.every(s => s.status === 'ok');
+  dot.className = allOk ? '' : 'warn';
+  dot.title = data.services.map(s => `${s.service}: ${s.status}`).join(' | ');
+}
+
+/* ─────────────────────────────── tabs ──── */
+document.querySelectorAll('nav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    btn.classList.add('active');
+    $(`view-${btn.dataset.view}`).classList.add('active');
+    if (btn.dataset.view === 'stats') loadStats();
+    if (btn.dataset.view === 'contacts') loadContacts();
+    if (btn.dataset.view === 'emails') loadEmails();
+  });
+});
+
+/* ─────────────────────────────── modal ──── */
+let _modalEmailId = null;
+
+function openEmailModal({ subject, body, email_id, title = 'Draft Email' }) {
+  $('modal-title').textContent = title;
+  $('modal-subject').textContent = subject || '';
+  $('modal-body-text').textContent = body || '';
+  _modalEmailId = email_id || null;
+  $('modal-send-btn').style.display = _modalEmailId ? '' : 'none';
+  $('email-modal').classList.add('open');
+}
+
+function closeModal() { $('email-modal').classList.remove('open'); }
+
+$('modal-close').addEventListener('click', closeModal);
+$('modal-close-btn').addEventListener('click', closeModal);
+$('email-modal').addEventListener('click', e => { if (e.target === $('email-modal')) closeModal(); });
+
+$('modal-send-btn').addEventListener('click', async () => {
+  if (!_modalEmailId) return;
+  $('modal-send-btn').disabled = true;
+  $('modal-send-btn').textContent = 'Sending…';
+  const res = await apiFetch(`/emails/${_modalEmailId}/send`, { method: 'POST' });
+  if (res) {
+    toast('Email sent successfully!');
+    closeModal();
+    loadEmails();
+  } else {
+    toast('Send failed — check GMAIL_APP_PASSWORD config.');
+  }
+  $('modal-send-btn').disabled = false;
+  $('modal-send-btn').textContent = 'Send Email';
+});
+
+/* ═════════════════════════════════════════
+   JOBS VIEW
+═════════════════════════════════════════ */
+let _allJobs = [];
+
+async function loadJobs() {
+  const grid = $('jobs-grid');
+  grid.innerHTML = '<div class="empty-state"><div class="loader"></div></div>';
+
+  const params = new URLSearchParams();
+  const q     = $('filter-search').value.trim();
+  const st    = $('filter-status').value;
+  const stack = $('filter-stack').value;
+  if (q)     params.set('role', q);
+  if (st)    params.set('status', st);
+  if (stack) params.set('stack', stack);
+  params.set('limit', '100');
+
+  const jobs = await apiFetch(`/jobs?${params}`);
+  _allJobs = jobs || [];
+
+  // Populate stack dropdown from seen tags
+  const allTags = new Set(_allJobs.flatMap(j => j.stack || []));
+  const sel = $('filter-stack');
+  const cur = sel.value;
+  [...sel.options].slice(1).forEach(o => o.remove());
+  [...allTags].sort().forEach(t => {
+    const o = document.createElement('option');
+    o.value = t; o.textContent = t;
+    if (t === cur) o.selected = true;
+    sel.appendChild(o);
+  });
+
+  renderJobCards(_allJobs);
+}
+
+function renderJobCards(jobs) {
+  const grid = $('jobs-grid');
+  if (!jobs.length) {
+    grid.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><p>No jobs found.</p></div>';
+    return;
+  }
+  grid.innerHTML = jobs.map(j => `
+    <div class="job-card">
+      <div class="job-card-header">
+        <div>
+          <h3>${esc(j.role)}</h3>
+          <div class="company">${esc(j.company)}${j.location ? ' · ' + esc(j.location) : ''}</div>
+        </div>
+        <span class="source-badge">${esc(j.source || '—')}</span>
+      </div>
+      <div class="tag-row">
+        ${(j.stack || []).slice(0, 6).map(t => `<span class="tag">${esc(t)}</span>`).join('')}
+      </div>
+      <div class="card-meta">
+        Posted ${fmtDate(j.posted_at)} &nbsp;·&nbsp; ${statusBadge(j.status)}
+      </div>
+      <div class="card-actions">
+        <button class="btn btn-secondary" onclick="discoverContacts('${j.id}','${esc(j.company)}')">👤 Discover</button>
+        <button class="btn btn-primary"   onclick="draftEmail('${j.id}','${esc(j.company)}','${esc(j.role)}')">✉ Draft</button>
+        <button class="btn btn-green"     onclick="markApplied('${j.id}', this)">✓ Applied</button>
+      </div>
+    </div>`).join('');
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+$('btn-filter').addEventListener('click', loadJobs);
+$('filter-search').addEventListener('keydown', e => { if(e.key==='Enter') loadJobs(); });
+
+/* Scraper trigger */
+$('btn-run-scraper').addEventListener('click', async () => {
+  const btn = $('btn-run-scraper');
+  btn.disabled = true; btn.textContent = '⏳ Running…';
+  await apiFetch('/scrape', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ role: 'Backend Engineer', stack: ['Python','Go'] })
+  });
+  toast('Scrapers triggered! Jobs will appear within ~30 s.');
+  setTimeout(() => { btn.disabled = false; btn.textContent = '▶ Run Scraper'; loadJobs(); }, 5000);
+});
+
+/* Discover contacts */
+async function discoverContacts(jobId, company) {
+  toast('Discovering contacts for ' + company + '… (runs in background)');
+  await apiFetch('/discover', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ company, job_id: jobId, roles:['Engineering Manager','Recruiter'] })
+  });
+  toast('Contact discovery triggered for ' + company);
+}
+
+/* Draft email via workflow */
+async function draftEmail(jobId, company, role) {
+  toast('Generating draft email…');
+  const res = await apiFetch('/workflow/apply', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ job_id: jobId, template:'cold_outreach' })
+  });
+  if (res && res.draft_email) {
+    openEmailModal({
+      title: `Draft — ${role} @ ${company}`,
+      subject: res.draft_email.subject,
+      body:    res.draft_email.body,
+      email_id: res.draft_email.email_id,
+    });
+  } else {
+    toast('Could not generate draft. Is the email generator service running?');
+  }
+}
+
+/* Mark applied */
+async function markApplied(jobId, btn) {
+  btn.disabled = true;
+  await apiFetch(`/jobs/${jobId}/status`, {
+    method:'PATCH',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ status:'applied' })
+  });
+  toast('Marked as applied!');
+  setTimeout(loadJobs, 500);
+}
+
+/* ═════════════════════════════════════════
+   CONTACTS VIEW
+═════════════════════════════════════════ */
+let _contactsCache = [];
+
+async function loadContacts(company = '') {
+  const tbody = $('contacts-body');
+  tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="loader"></div></div></td></tr>';
+
+  const q = company || $('contact-company-filter').value.trim();
+  const url = q ? `/contacts?company=${encodeURIComponent(q)}` : '/contacts?company=';
+  const data = await apiFetch(url);
+  _contactsCache = data || [];
+  renderContactRows(_contactsCache);
+}
+
+function renderContactRows(rows) {
+  const tbody = $('contacts-body');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">👤</div><p>No contacts discovered yet. Click "Discover" on a job card.</p></div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(c => `
+    <tr>
+      <td>${esc(c.name || '—')}</td>
+      <td>${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : '—'}</td>
+      <td>${esc(c.role || '—')}</td>
+      <td>${esc(c.company)}</td>
+      <td>${verifiedBadge(c.verified)}</td>
+      <td>${esc(c.source || '—')}</td>
+      <td>
+        <button class="btn btn-secondary" style="font-size:.75rem;padding:4px 8px"
+          onclick="deleteContact('${c.id}',this)">Delete</button>
+      </td>
+    </tr>`).join('');
+}
+
+$('contact-company-filter').addEventListener('keydown', e => { if(e.key==='Enter') loadContacts(); });
+$('contact-company-filter').addEventListener('input', () => {
+  if (!$('contact-company-filter').value) loadContacts('');
+});
+
+async function deleteContact(id, btn) {
+  btn.disabled = true;
+  await apiFetch(`/contacts/${id}`, { method:'DELETE' });
+  toast('Contact removed.');
+  loadContacts();
+}
+
+/* ═════════════════════════════════════════
+   EMAILS VIEW
+═════════════════════════════════════════ */
+async function loadEmails() {
+  /* We need a job_id to query, but here we show all via stats workaround:
+     fetch jobs first, then collect email rows for first few job_ids */
+  const tbody = $('emails-body');
+  tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="loader"></div></div></td></tr>';
+
+  // Collect emails by iterating through jobs (up to 20)
+  const jobs = _allJobs.length ? _allJobs : (await apiFetch('/jobs?limit=20') || []);
+  const emailMap = {};
+
+  await Promise.all(jobs.slice(0, 20).map(async j => {
+    const emails = await apiFetch(`/emails?job_id=${j.id}`);
+    if (emails) emails.forEach(e => { emailMap[e.id] = { ...e, _company: j.company, _role: j.role }; });
+  }));
+
+  const all = Object.values(emailMap).sort((a,b) => new Date(b.generated_at) - new Date(a.generated_at));
+  if (!all.length) {
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">✉️</div><p>No emails generated yet.</p></div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = all.map(e => `
+    <tr id="erow-${e.id}">
+      <td><strong>${esc(e._company)}</strong><br/><span style="font-size:.8125rem;color:var(--text-muted)">${esc(e._role)}</span></td>
+      <td>${esc(e.contact_id ? e.contact_id.slice(0,8)+'…' : '—')}</td>
+      <td><code style="font-size:.75rem;background:var(--bg);padding:2px 6px;border-radius:4px">${esc(e.template)}</code></td>
+      <td>${statusBadge(e.status)}</td>
+      <td>${fmtDate(e.generated_at)}</td>
+      <td style="display:flex;gap:6px">
+        <button class="btn btn-secondary" style="font-size:.75rem;padding:4px 8px"
+          onclick="toggleEmailBody('${e.id}','${esc(e.subject)}','${escapeSingleQuote(e.body)}')">View</button>
+        <button class="btn btn-primary" style="font-size:.75rem;padding:4px 8px"
+          onclick="openEmailModal({subject:'${esc(e.subject)}',body:decodeURIComponent('${encodeURIComponent(e.body || '')}'),email_id:'${e.id}'})">Send</button>
+      </td>
+    </tr>
+    <tr id="ebody-${e.id}" style="display:none">
+      <td colspan="6" class="email-body-pre">${esc(e.body)}</td>
+    </tr>`).join('');
+}
+
+function escapeSingleQuote(s) { return (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n'); }
+
+function toggleEmailBody(id) {
+  const row = document.getElementById(`ebody-${id}`);
+  if (!row) return;
+  row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+}
+
+/* ═════════════════════════════════════════
+   STATS VIEW
+═════════════════════════════════════════ */
+async function loadStats() {
+  const stats = await apiFetch('/stats');
+  const jobs  = await apiFetch('/jobs?limit=500');
+
+  if (stats) {
+    const byStatus = stats.by_status || {};
+    const bySource = stats.by_source || {};
+    const total   = Object.values(byStatus).reduce((a,b)=>a+b, 0);
+    const applied = byStatus['applied'] || 0;
+    const pending = (byStatus['new'] || 0);
+
+    $('stat-total').textContent   = total;
+    $('stat-applied').textContent = applied;
+    $('stat-pending').textContent = pending;
+
+    // Bar chart
+    const labels = Object.keys(bySource);
+    const values = Object.values(bySource);
+    const ctx = document.getElementById('source-chart').getContext('2d');
+    if (_sourceChart) _sourceChart.destroy();
+    _sourceChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Jobs',
+          data: values,
+          backgroundColor: '#4f46e5',
+          borderRadius: 4,
+          borderSkipped: false,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } },
+          x: { grid: { display: false } },
+        }
+      }
+    });
+  }
+
+  // Top companies
+  if (jobs) {
+    const counts = {};
+    jobs.forEach(j => { counts[j.company] = (counts[j.company]||0)+1; });
+    const top5 = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    $('top-companies-list').innerHTML = top5.length
+      ? top5.map(([co,n]) => `<div class="top-company-row"><span>${esc(co)}</span><span class="top-company-count">${n}</span></div>`).join('')
+      : '<p style="color:var(--text-muted);font-size:.875rem">No data yet.</p>';
+  }
+}
+
+/* ─────────────────────────────── init ──── */
+(async function init() {
+  checkHealth();
+  setInterval(checkHealth, 30000);
+  await loadJobs();
+})();
+</script>
+</body>
+</html>

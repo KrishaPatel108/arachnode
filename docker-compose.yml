@@ -1,0 +1,183 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Job Discovery System — Full Stack
+#
+# Services:
+#   redis        — shared message broker
+#   postgres     — shared database
+#   crawler      — Scrapy job crawler (one-shot)
+#   aggregator   — FastAPI stream consumer + jobs REST API  (:8000)
+#   scraper      — Platform scraper (Naukri/LinkedIn/Internshala)  (:8001)
+#   contact      — Contact discovery pipeline  (:8002)
+#   email-gen    — Cold email generator  (:8003)
+#   gateway      — API gateway + dashboard  (:8080)
+# ─────────────────────────────────────────────────────────────────────────────
+
+x-common-env: &common-env
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  DATABASE_URL: postgresql://${POSTGRES_USER:-jobuser}:${POSTGRES_PASSWORD:-jobpass}@postgres:5432/${POSTGRES_DB:-jobsdb}
+
+services:
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+    networks: [jobnet]
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-jobuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jobpass}
+      POSTGRES_DB:       ${POSTGRES_DB:-jobsdb}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-jobuser} -d ${POSTGRES_DB:-jobsdb}"]
+      interval: 5s
+      retries: 10
+    networks: [jobnet]
+
+  # ── Crawler (Scrapy, one-shot) ─────────────────────────────────────────────
+  crawler:
+    build:
+      context: ./crawler-service
+      dockerfile: Dockerfile
+    environment:
+      <<: *common-env
+      JOBSEEKER_ROLE:  ${JOBSEEKER_ROLE:-Backend Engineer}
+      JOBSEEKER_STACK: ${JOBSEEKER_STACK:-Python,FastAPI,PostgreSQL,Redis,Go}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: "no"
+    command: ["scrapy", "crawl", "remotive"]
+    networks: [jobnet]
+
+  # ── Aggregator ─────────────────────────────────────────────────────────────
+  aggregator:
+    build:
+      context: ./aggregator-service
+      dockerfile: Dockerfile
+    environment:
+      <<: *common-env
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks: [jobnet]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 10s
+      retries: 5
+      start_period: 15s
+
+  # ── Platform Scraper ───────────────────────────────────────────────────────
+  scraper:
+    build:
+      context: ./scraper-service
+      dockerfile: Dockerfile
+    environment:
+      <<: *common-env
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [jobnet]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 10s
+      retries: 5
+      start_period: 20s
+
+  # ── Contact Discovery ──────────────────────────────────────────────────────
+  contact:
+    build:
+      context: ./contact-discovery-service
+      dockerfile: Dockerfile
+    environment:
+      <<: *common-env
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [jobnet]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 10s
+      retries: 5
+      start_period: 25s
+
+  # ── Email Generator ────────────────────────────────────────────────────────
+  email-gen:
+    build:
+      context: ./email-generator-service
+      dockerfile: Dockerfile
+    environment:
+      <<: *common-env
+      OLLAMA_BASE_URL:    ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      GMAIL_ADDRESS:      ${GMAIL_ADDRESS:-}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
+      YOUR_NAME:          ${YOUR_NAME:-Applicant}
+      YOUR_GITHUB_URL:    ${YOUR_GITHUB_URL:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [jobnet]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 10s
+      retries: 5
+      start_period: 15s
+
+  # ── API Gateway + Dashboard ────────────────────────────────────────────────
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    environment:
+      AGGREGATOR_URL: http://aggregator:8000
+      SCRAPER_URL:    http://scraper:8000
+      CONTACT_URL:    http://contact:8000
+      EMAIL_GEN_URL:  http://email-gen:8000
+    depends_on:
+      aggregator:
+        condition: service_healthy
+      scraper:
+        condition: service_healthy
+      contact:
+        condition: service_healthy
+      email-gen:
+        condition: service_healthy
+    networks: [jobnet]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/health || exit 1"]
+      interval: 15s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  pgdata:
+
+networks:
+  jobnet:
+    driver: bridge
